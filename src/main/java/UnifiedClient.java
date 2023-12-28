@@ -24,7 +24,7 @@ public class UnifiedClient {
         this.clientName = clientName;
         this.musicFolderPath = musicFolderPath; // Set the music folder path
         this.clientSongs = clientSongs;
-        this.p2pPort = p2pPort;
+        this.p2pPort = 0;
     }
 
     public void start() {
@@ -88,6 +88,8 @@ public class UnifiedClient {
             p2pPort = p2pServerSocket.getLocalPort(); // Save the port for later use
             System.out.println("P2P Server started on port: " + p2pServerSocket.getLocalPort());
 
+            out.println("UPDATE_PORT " + clientName + " " + p2pPort);
+
             while (!p2pServerSocket.isClosed()) {
                 Socket clientSocket = p2pServerSocket.accept();
                 new Thread(() -> handleP2PClient(clientSocket)).start();
@@ -99,28 +101,41 @@ public class UnifiedClient {
 
     private void handleP2PClient(Socket clientSocket) {
         try {
+            System.out.println("handleP2PClient: New P2P connection established from " + clientSocket.getInetAddress());
             BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             OutputStream outStream = clientSocket.getOutputStream();
-    
-            String requestedSong = reader.readLine(); // Expecting the song name
-            Path songPath = Paths.get(musicFolderPath, requestedSong); // Use the music folder path
+
+            String requestedSong = reader.readLine(); 
+            System.out.println("handleP2PClient: Requested song: " + requestedSong);
+
+            Path songPath = Paths.get(musicFolderPath, requestedSong);
             if (Files.exists(songPath)) {
-                Files.copy(songPath, outStream); // Stream the song file
+                System.out.println("handleP2PClient: Found song, streaming: " + songPath);
+                try (InputStream songStream = Files.newInputStream(songPath)) {
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    while ((bytesRead = songStream.read(buffer)) != -1) {
+                        outStream.write(buffer, 0, bytesRead);
+                    }
+                }
+                System.out.println("handleP2PClient: Finished streaming song.");
+            } else {
+                System.out.println("handleP2PClient: Song not found: " + songPath);
             }
-    
-            reader.close();
-            outStream.close();
         } catch (IOException e) {
-            System.err.println("Error handling P2P client: " + e.getMessage());
-            // Additional error handling
+            System.err.println("handleP2PClient: Error in handling P2P client: " + e.getMessage());
+            e.printStackTrace();
         } finally {
             try {
                 clientSocket.close();
+                System.out.println("handleP2PClient: Closed P2P connection.");
             } catch (IOException e) {
-                System.err.println("Error closing client socket: " + e.getMessage());
+                System.err.println("handleP2PClient: Error closing client socket: " + e.getMessage());
             }
         }
-    }          
+    }    
+    
+             
 
     private void showMenu() {
         System.out.println("\nMenu:");
@@ -148,15 +163,18 @@ public class UnifiedClient {
     
     public void playMP3Stream(InputStream stream) {
         try {
+            System.out.println("Attempting to play stream..."); // Log attempt
             Player player = new Player(stream);
-            System.out.println("Streaming and playing the file...");
+            System.out.println("Starting playback..."); // Log start
             player.play();
-            System.out.println("Finished playing the file.");
+            System.out.println("Finished playing the file."); // Log finish
         } catch (Exception e) {
             System.err.println("Problem playing stream");
             e.printStackTrace();
         }
-    }    
+    }
+    
+        
 
     private void listenForServerResponses(BufferedReader buffin) {
         try {

@@ -1,7 +1,4 @@
-import java.io.PrintWriter;
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.IOException;
+import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
 
@@ -10,7 +7,6 @@ public class RequestCommand implements Command {
     private BufferedReader buffin;
     private UnifiedClient client; // Reference to the UnifiedClient
 
-    // Constructor should now take the UnifiedClient as a parameter
     public RequestCommand(PrintWriter out, BufferedReader buffin, UnifiedClient client) {
         this.out = out;
         this.buffin = buffin;
@@ -19,34 +15,50 @@ public class RequestCommand implements Command {
 
     @Override
     public void execute() {
-        System.out.println("Enter the name of the song you want to request:");
+        System.out.println("RequestCommand: Enter the name of the song you want to request:");
         Scanner scanner = new Scanner(System.in);
         String songName = scanner.nextLine();
 
-        // Ask the server for the address of the peer that has the song
         out.println("REQUEST_SONG " + songName);
+        System.out.println("RequestCommand: Sent request for song: " + songName);
 
         try {
+            System.out.println("RequestCommand: Waiting for server response...");
             String response = buffin.readLine();
+            System.out.println("RequestCommand: Received response: " + response);
+
             if (response.startsWith("PEER_ADDRESS")) {
                 String[] responseParts = response.split(" ");
                 String peerIP = responseParts[1];
                 int peerPort = Integer.parseInt(responseParts[2]);
 
-                // Connect to the peer and request the song
-                try (Socket peerSocket = new Socket(peerIP, peerPort)) {
-                    PrintWriter peerOut = new PrintWriter(peerSocket.getOutputStream(), true);
-                    peerOut.println(songName); // Send the song name to the peer
+                System.out.println(
+                        "RequestCommand: Attempting to connect to peer at IP: " + peerIP + " and Port: " + peerPort);
+                try {
+                    Socket peerSocket = new Socket(peerIP, peerPort);
+                    System.out.println("RequestCommand: Connection established with peer.");
 
-                    // Stream and play the song
+                    PrintWriter peerOut = new PrintWriter(peerSocket.getOutputStream(), true);
+                    peerOut.println(songName);
+                    System.out.println("RequestCommand: Requested song: " + songName);
+
                     InputStream stream = peerSocket.getInputStream();
+                    System.out.println("RequestCommand: Starting to receive the song stream...");
+
                     client.playMP3Stream(stream);
+                    peerSocket.close();
+
+                } catch (IOException e) {
+                    System.err.println("RequestCommand: Error in peer connection or streaming: " + e.getMessage());
+                    e.printStackTrace();
                 }
             } else {
-                System.out.println("Could not find the requested song.");
+                System.out.println("RequestCommand: The requested song was not found.");
             }
         } catch (IOException e) {
-            System.err.println("Error handling song request: " + e.getMessage());
+            System.err.println("RequestCommand: Error in processing song request: " + e.getMessage());
+            System.out.println("RequestCommand: Exiting.");
+            e.printStackTrace();
         }
     }
 }
