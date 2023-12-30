@@ -3,6 +3,7 @@ import java.net.Socket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.Scanner;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.List;
 import java.util.ArrayList;
 import java.nio.file.*;
@@ -18,6 +19,9 @@ public class UnifiedClient {
     private int p2pPort;
     private String musicFolderPath;
     private PrintWriter out;
+    private String lastCommandIssued;
+    private LinkedBlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
+    private BufferedReader buffin;
 
     // Updated Constructor
     public UnifiedClient(String clientName, String musicFolderPath, List<String> clientSongs, int p2pPort) {
@@ -29,66 +33,65 @@ public class UnifiedClient {
 
     public void start() {
         System.out.println("Starting the client...");
-    
-        Socket clientSocket = null;
-        BufferedReader buffin = null;
-        PrintWriter out = null;
-        Scanner scanner = null;
-
-        // Start P2P server in a new thread
-        new Thread(this::startP2PServer).start();
-    
-        try {
-            clientSocket = new Socket(InetAddress.getByName(serverName), SERVER_PORT);
-            buffin = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+        try (Socket clientSocket = new Socket(InetAddress.getByName(serverName), SERVER_PORT);
+                Scanner scanner = new Scanner(System.in)) {
             out = new PrintWriter(clientSocket.getOutputStream(), true);
-            scanner = new Scanner(System.in);
-    
+            buffin = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+
+            // Start P2P server in a new thread
+            new Thread(this::startP2PServer).start();
+
             System.out.println("Attempting to connect to the server at " + serverName + ":" + SERVER_PORT);
             System.out.println("Connected to server. Ready for user input.");
-    
+
             out.println("REGISTER " + clientName + " " + p2pPort + " " + String.join(" ", clientSongs));
-    
-            final BufferedReader finalBuffin = buffin;
-            new Thread(() -> listenForServerResponses(finalBuffin)).start();
-    
+
             showMenu();
-    
+
             while (true) {
                 String commandInput = scanner.nextLine();
-                processCommand(commandInput, out, finalBuffin);
+                processCommand(commandInput);
             }
-    
         } catch (IOException e) {
             System.err.println("Error: " + e.getMessage());
             System.out.println("Connection lost or unable to connect. Exiting.");
-        } finally {
-            try {
-                if (scanner != null) {
-                    scanner.close();
-                }
-                if (out != null) {
-                    out.close();
-                }
-                if (buffin != null) {
-                    buffin.close();
-                }
-                if (clientSocket != null) {
-                    clientSocket.close();
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }
+    }
+
+    private void listenForServerResponses() {
+        try {
+            String response;
+            while ((response = buffin.readLine()) != null) {
+                responseQueue.put(response);
+            }
+        } catch (IOException | InterruptedException e) {
+            System.err.println("Error listening for server responses: " + e.getMessage());
+        }
+    }
+
+    public String waitForResponse(String responseType) {
+        try {
+            String response;
+            while ((response = buffin.readLine()) != null) {
+                if (response.startsWith(responseType)) {
+                    return response;
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error reading server response: " + e.getMessage());
+        }
+        return null;
     }
 
     private void startP2PServer() {
         try {
-            p2pServerSocket = new ServerSocket(0); // 0 allows the system to pick an available port
-            p2pPort = p2pServerSocket.getLocalPort(); // Save the port for later use
-            System.out.println("P2P Server started on port: " + p2pServerSocket.getLocalPort());
+            p2pServerSocket = new ServerSocket(0); // Lets the system pick an available port
+            p2pPort = p2pServerSocket.getLocalPort();
+            System.out.println("P2P Server started on port: " + p2pPort);
 
-            out.println("UPDATE_PORT " + clientName + " " + p2pPort);
+            if (out != null) {
+                out.println("UPDATE_PORT " + clientName + " " + p2pPort);
+            }
 
             while (!p2pServerSocket.isClosed()) {
                 Socket clientSocket = p2pServerSocket.accept();
@@ -101,41 +104,39 @@ public class UnifiedClient {
 
     private void handleP2PClient(Socket clientSocket) {
         try {
-            System.out.println("handleP2PClient: New P2P connection established from " + clientSocket.getInetAddress());
+            System.out.println("handleP2PClient: New P2P connection from " + clientSocket.getInetAddress());
             BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
             OutputStream outStream = clientSocket.getOutputStream();
 
-            String requestedSong = reader.readLine(); 
+            String requestedSong = reader.readLine();
             System.out.println("handleP2PClient: Requested song: " + requestedSong);
 
             Path songPath = Paths.get(musicFolderPath, requestedSong);
             if (Files.exists(songPath)) {
-                System.out.println("handleP2PClient: Found song, streaming: " + songPath);
-                try (InputStream songStream = Files.newInputStream(songPath)) {
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    while ((bytesRead = songStream.read(buffer)) != -1) {
-                        outStream.write(buffer, 0, bytesRead);
-                    }
+                System.out.println("handleP2PClient: Streaming song: " + songPath);
+                Files.copy(songPath, outStream);
+                System.out.println("handleP2PClient: Finished streaming. Awaiting acknowledgment...");
+                writer.println("END_OF_SONG"); // Send end-of-song signal
+                String ack = reader.readLine(); // Wait for acknowledgment
+                if ("ACK".equals(ack)) {
+                    System.out.println("handleP2PClient: Acknowledgment received.");
                 }
-                System.out.println("handleP2PClient: Finished streaming song.");
             } else {
-                System.out.println("handleP2PClient: Song not found: " + songPath);
+                System.out.println("handleP2PClient: Song not found.");
             }
         } catch (IOException e) {
-            System.err.println("handleP2PClient: Error in handling P2P client: " + e.getMessage());
+            System.err.println("handleP2PClient: Error: " + e.getMessage());
             e.printStackTrace();
         } finally {
             try {
                 clientSocket.close();
-                System.out.println("handleP2PClient: Closed P2P connection.");
+                System.out.println("handleP2PClient: Closed connection.");
             } catch (IOException e) {
-                System.err.println("handleP2PClient: Error closing client socket: " + e.getMessage());
+                System.err.println("handleP2PClient: Error closing socket: " + e.getMessage());
             }
         }
-    }    
-    
-             
+    }
 
     private void showMenu() {
         System.out.println("\nMenu:");
@@ -145,47 +146,35 @@ public class UnifiedClient {
         System.out.println("'info <client_id>' - Get info about a specific client.");
         System.out.println("'exit' - Quit the application.");
         System.out.print("Enter command: ");
-    } 
+    }
 
-    private void processCommand(String commandInput, PrintWriter out, BufferedReader buffin) {
-        String[] commandParts = commandInput.split(" ");
-        String commandString = commandParts[0].toLowerCase();
-    
-        System.out.println("Processing command: " + commandString); // Debug log
-    
-        Command command = CommandFactory.createCommand(commandString, out, buffin, this);
+    private void processCommand(String commandInput) {
+        Command command = CommandFactory.createCommand(commandInput, out, this);
         if (command != null) {
             command.execute();
         } else {
             System.out.println("Invalid command, please try again.");
         }
-    }    
-    
-    public void playMP3Stream(InputStream stream) {
+    }
+
+    public String getLastCommandIssued() {
+        return lastCommandIssued;
+    }
+
+    public void playMP3Stream(InputStream stream, Socket peerSocket) {
         try {
-            System.out.println("Attempting to play stream..."); // Log attempt
+            System.out.println("Attempting to play stream...");
             Player player = new Player(stream);
-            System.out.println("Starting playback..."); // Log start
+            System.out.println("Starting playback...");
             player.play();
-            System.out.println("Finished playing the file."); // Log finish
+            System.out.println("Finished playing the file.");
+            PrintWriter out = new PrintWriter(peerSocket.getOutputStream(), true);
+            out.println("ACK"); // Send acknowledgment
         } catch (Exception e) {
             System.err.println("Problem playing stream");
             e.printStackTrace();
         }
     }
-    
-        
-
-    private void listenForServerResponses(BufferedReader buffin) {
-        try {
-            String response;
-            while ((response = buffin.readLine()) != null) {
-                System.out.println(response); // Just print the server's response
-            }
-        } catch (IOException e) {
-            System.err.println("Error listening for server responses: " + e.getMessage());
-        }
-    }      
 
     private static List<String> loadSongsFromFolder(String folderPath) {
         List<String> songs = new ArrayList<>();
@@ -200,19 +189,19 @@ public class UnifiedClient {
         }
         return songs;
     }
-    
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
         System.out.println("Welcome to VSFy, a simple audio streaming application.");
-    
+
         System.out.print("Please enter a name for this client instance: ");
         String clientName = scanner.nextLine();
-    
+
         System.out.print("Please enter the path to your music folder: ");
         String musicFolderPath = scanner.nextLine();
-    
+
         List<String> clientSongs = loadSongsFromFolder(musicFolderPath);
         UnifiedClient client = new UnifiedClient(clientName, musicFolderPath, clientSongs, 0);
         client.start();
-    }    
+    }
 }

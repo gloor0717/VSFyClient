@@ -1,15 +1,12 @@
 import java.io.PrintWriter;
 import java.util.Scanner;
-import java.io.BufferedReader;
 
 public class InfoCommand implements Command {
     private PrintWriter out;
-    private BufferedReader buffin;
     private UnifiedClient client;
 
-    public InfoCommand(PrintWriter out, BufferedReader buffin, UnifiedClient client) {
+    public InfoCommand(PrintWriter out, UnifiedClient client) {
         this.out = out;
-        this.buffin = buffin;
         this.client = client;
     }
 
@@ -20,8 +17,10 @@ public class InfoCommand implements Command {
         String clientId = scanner.nextLine();
 
         String command = "INFO " + clientId;
-        System.out.println("Sending INFO command to server: " + command); // Debug log
+        System.out.println("Sending INFO command to server: " + command);
         out.println(command);
+
+        String response = client.waitForResponse("Client:");
+        System.out.println("Info Response: " + response);
     }
 }
-
