@@ -3,11 +3,11 @@ import java.net.Socket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.Scanner;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.List;
 import java.util.ArrayList;
 import java.nio.file.*;
-import javazoom.jl.player.Player;
+import javazoom.jl.player.*;
+import javazoom.jl.decoder.*;
 
 public class UnifiedClient {
 
@@ -19,8 +19,6 @@ public class UnifiedClient {
     private int p2pPort;
     private String musicFolderPath;
     private PrintWriter out;
-    private String lastCommandIssued;
-    private LinkedBlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
     private BufferedReader buffin;
 
     // Updated Constructor
@@ -55,17 +53,6 @@ public class UnifiedClient {
         } catch (IOException e) {
             System.err.println("Error: " + e.getMessage());
             System.out.println("Connection lost or unable to connect. Exiting.");
-        }
-    }
-
-    private void listenForServerResponses() {
-        try {
-            String response;
-            while ((response = buffin.readLine()) != null) {
-                responseQueue.put(response);
-            }
-        } catch (IOException | InterruptedException e) {
-            System.err.println("Error listening for server responses: " + e.getMessage());
         }
     }
 
@@ -157,24 +144,56 @@ public class UnifiedClient {
         }
     }
 
-    public String getLastCommandIssued() {
-        return lastCommandIssued;
-    }
-
     public void playMP3Stream(InputStream stream, Socket peerSocket) {
         try {
-            System.out.println("Attempting to play stream...");
-            Player player = new Player(stream);
-            System.out.println("Starting playback...");
-            player.play();
+            System.out.println("Starting to play stream...");
+            
+            // Initialize MP3 decoder components
+            Bitstream bitstream = new Bitstream(stream);
+            Decoder decoder = new Decoder();
+            AudioDevice audioDevice = FactoryRegistry.systemRegistry().createAudioDevice();
+            audioDevice.open(decoder);
+    
+            boolean done = false;
+            while (!done) {
+                try {
+                    Header frameHeader = bitstream.readFrame();
+                    if (frameHeader != null) {
+                        // Decode and play the frame
+                        SampleBuffer output = (SampleBuffer) decoder.decodeFrame(frameHeader, bitstream);
+                        audioDevice.write(output.getBuffer(), 0, output.getBufferLength());
+                        bitstream.closeFrame();
+                    } 
+    
+                    // Check for end-of-stream indicator
+                    if (stream.available() <= 0) {
+                        // If no more data is available, assume end of stream
+                        done = true;
+                    }
+                    
+                } catch (BitstreamException | DecoderException e) {
+                    System.err.println("Error decoding MP3 frame: " + e.getMessage());
+                    break; // Exit loop on error
+                }
+            }
+    
+            audioDevice.flush();
             System.out.println("Finished playing the file.");
-            PrintWriter out = new PrintWriter(peerSocket.getOutputStream(), true);
-            out.println("ACK"); // Send acknowledgment
+    
         } catch (Exception e) {
-            System.err.println("Problem playing stream");
+            System.err.println("Problem playing stream: " + e.getMessage());
             e.printStackTrace();
+        } finally {
+            try {
+                if (stream != null) stream.close();
+                if (peerSocket != null && !peerSocket.isClosed()) peerSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
+       
+    
 
     private static List<String> loadSongsFromFolder(String folderPath) {
         List<String> songs = new ArrayList<>();
