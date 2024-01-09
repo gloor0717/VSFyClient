@@ -11,16 +11,18 @@ public class ListCommand implements Command {
 
     @Override
     public void execute() {
-        System.out.println("Listing music...");
+        System.out.println("\nMusic list : ");
+        System.out.println("--------------------------------------------------------");
         out.println("LIST_MUSIC");
 
         String response;
         while (true) {
             response = client.waitForResponse("");
-            if (response == null || response.equals("END_OF_LIST")) {
+            if (response == null || response.equals("END_OF_LIST")) { 
                 break;
             }
             System.out.println(response);
         }
+        System.out.print("Enter command: ");
     }
 }

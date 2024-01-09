@@ -2,5 +2,6 @@ public class InvalidCommand implements Command {
     @Override
     public void execute() {
         System.out.println("Invalid command, please try again.");
+        System.out.print("Enter command: ");
     }
 }

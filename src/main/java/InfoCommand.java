@@ -17,10 +17,11 @@ public class InfoCommand implements Command {
         String clientId = scanner.nextLine();
 
         String command = "INFO " + clientId;
-        System.out.println("Sending INFO command to server: " + command);
+        //System.out.println("Sending INFO command to server: " + command);
         out.println(command);
 
         String response = client.waitForResponse("Client:");
-        System.out.println("Info Response: " + response);
+        System.out.println(response);
+        System.out.print("Enter command: ");
     }
 }

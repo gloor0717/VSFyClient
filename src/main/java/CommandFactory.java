@@ -11,6 +11,8 @@ public class CommandFactory {
                 return new InfoCommand(out, client);
             case "exit":
                 return new ExitCommand();
+            case "help":
+                return new HelpCommand(); 
             default:
                 return new InvalidCommand();
         }
