@@ -91,26 +91,26 @@ public class UnifiedClient {
 
     private void handleP2PClient(Socket clientSocket) {
         try {
-            System.out.println("handleP2PClient: New P2P connection from " + clientSocket.getInetAddress());
+            //System.out.println("handleP2PClient: New P2P connection from " + clientSocket.getInetAddress());
             BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
             OutputStream outStream = clientSocket.getOutputStream();
 
             String requestedSong = reader.readLine();
-            System.out.println("handleP2PClient: Requested song: " + requestedSong);
+            //System.out.println("handleP2PClient: Requested song: " + requestedSong);
 
             Path songPath = Paths.get(musicFolderPath, requestedSong);
             if (Files.exists(songPath)) {
-                System.out.println("handleP2PClient: Streaming song: " + songPath);
+                //System.out.println("handleP2PClient: Streaming song: " + songPath);
                 Files.copy(songPath, outStream);
-                System.out.println("handleP2PClient: Finished streaming. Awaiting acknowledgment...");
+                //System.out.println("handleP2PClient: Finished streaming. Awaiting acknowledgment...");
                 writer.println("END_OF_SONG"); // Send end-of-song signal
                 String ack = reader.readLine(); // Wait for acknowledgment
                 if ("ACK".equals(ack)) {
-                    System.out.println("handleP2PClient: Acknowledgment received.");
+                    //System.out.println("handleP2PClient: Acknowledgment received.");
                 }
             } else {
-                System.out.println("handleP2PClient: Song not found.");
+                //System.out.println("handleP2PClient: Song not found.");
             }
         } catch (IOException e) {
             System.err.println("handleP2PClient: Error: " + e.getMessage());
@@ -118,7 +118,7 @@ public class UnifiedClient {
         } finally {
             try {
                 clientSocket.close();
-                System.out.println("handleP2PClient: Closed connection.");
+                //System.out.println("handleP2PClient: Closed connection.");
             } catch (IOException e) {
                 System.err.println("handleP2PClient: Error closing socket: " + e.getMessage());
             }
@@ -193,6 +193,7 @@ public class UnifiedClient {
                 e.printStackTrace();
             }
         }
+        System.out.print("Enter command: ");
     }
        
     
