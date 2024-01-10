@@ -1,4 +1,11 @@
+/**
+ * Represents a command that displays the help menu.
+ */
 public class HelpCommand implements Command {
+
+    /**
+     * Executes the help command.
+     */
     @Override
     public void execute() {
         System.out.println("\nMenu:");

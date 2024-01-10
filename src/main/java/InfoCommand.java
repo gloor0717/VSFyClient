@@ -1,10 +1,19 @@
 import java.io.PrintWriter;
 import java.util.Scanner;
 
+/**
+ * Represents a command to retrieve information about a client.
+ */
 public class InfoCommand implements Command {
     private PrintWriter out;
     private UnifiedClient client;
 
+    /**
+     * Constructs an InfoCommand object.
+     * 
+     * @param out    the PrintWriter object used to send commands to the server
+     * @param client the UnifiedClient object used to receive responses from the server
+     */
     public InfoCommand(PrintWriter out, UnifiedClient client) {
         this.out = out;
         this.client = client;
@@ -17,7 +26,6 @@ public class InfoCommand implements Command {
         String clientId = scanner.nextLine();
 
         String command = "INFO " + clientId;
-        //System.out.println("Sending INFO command to server: " + command);
         out.println(command);
 
         String response = client.waitForResponse("Client:");

@@ -10,6 +10,10 @@ import java.nio.file.*;
 import javazoom.jl.player.*;
 import javazoom.jl.decoder.*;
 
+/**
+ * The UnifiedClient class represents a client in the VSFy audio streaming application.
+ * It connects to a server, registers itself, and allows the user to interact with the application.
+ */
 public class UnifiedClient {
 
     private static final int SERVER_PORT = 45000;
@@ -22,7 +26,14 @@ public class UnifiedClient {
     private PrintWriter out;
     private BufferedReader buffin;
 
-    // Updated Constructor
+    /**
+     * Constructs a UnifiedClient object with the specified client name, music folder path, client songs, and P2P port.
+     * 
+     * @param clientName the name of the client
+     * @param musicFolderPath the path to the music folder
+     * @param clientSongs the list of client songs
+     * @param p2pPort the P2P port
+     */
     public UnifiedClient(String clientName, String musicFolderPath, List<String> clientSongs, int p2pPort) {
         this.clientName = clientName;
         this.musicFolderPath = musicFolderPath; // Set the music folder path
@@ -30,6 +41,9 @@ public class UnifiedClient {
         this.p2pPort = 0;
     } 
 
+    /**
+     * Starts the client by connecting to the server, registering the client, and starting the user interaction loop.
+     */
     public void start() {
         System.out.println("Starting the client...");
         Socket clientSocket = null;
@@ -73,24 +87,27 @@ public class UnifiedClient {
         }
     }
     
-
+    /**
+     * Waits for a response from the server of the specified response type.
+     * 
+     * @param responseType the response type to wait for
+     * @return the response from the server, or null if no response is received
+     */
     public String waitForResponse(String responseType) {
-    try {
-        String response;
-        while ((response = buffin.readLine()) != null) {
-            if (response.startsWith(responseType)) {
-                return response;
+        try {
+            String response;
+            while ((response = buffin.readLine()) != null) {
+                if (response.startsWith(responseType)) {
+                    return response;
+                }
             }
+        } catch (SocketTimeoutException e) {
+            System.out.println("Response timed out.");
+        } catch (IOException e) {
+            System.err.println("Error reading server response: " + e.getMessage());
         }
-    } catch (SocketTimeoutException e) {
-        System.out.println("Response timed out.");
-    } catch (IOException e) {
-        System.err.println("Error reading server response: " + e.getMessage());
+        return null;
     }
-    return null;
-}
-
-    
 
     private void startP2PServer() {
         try {
@@ -113,26 +130,22 @@ public class UnifiedClient {
 
     private void handleP2PClient(Socket clientSocket) {
         try {
-            //System.out.println("handleP2PClient: New P2P connection from " + clientSocket.getInetAddress());
             BufferedReader reader = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
             PrintWriter writer = new PrintWriter(clientSocket.getOutputStream(), true);
             OutputStream outStream = clientSocket.getOutputStream();
 
             String requestedSong = reader.readLine();
-            //System.out.println("handleP2PClient: Requested song: " + requestedSong);
 
             Path songPath = Paths.get(musicFolderPath, requestedSong);
             if (Files.exists(songPath)) {
-                //System.out.println("handleP2PClient: Streaming song: " + songPath);
                 Files.copy(songPath, outStream);
-                //System.out.println("handleP2PClient: Finished streaming. Awaiting acknowledgment...");
                 writer.println("END_OF_SONG"); // Send end-of-song signal
                 String ack = reader.readLine(); // Wait for acknowledgment
                 if ("ACK".equals(ack)) {
-                    //System.out.println("handleP2PClient: Acknowledgment received.");
+                    // Acknowledgment received
                 }
             } else {
-                //System.out.println("handleP2PClient: Song not found.");
+                // Song not found
             }
         } catch (IOException e) {
             System.err.println("handleP2PClient: Error: " + e.getMessage());
@@ -140,7 +153,6 @@ public class UnifiedClient {
         } finally {
             try {
                 clientSocket.close();
-                //System.out.println("handleP2PClient: Closed connection.");
             } catch (IOException e) {
                 System.err.println("handleP2PClient: Error closing socket: " + e.getMessage());
             }
@@ -218,8 +230,6 @@ public class UnifiedClient {
         System.out.print("Enter command: ");
     }
        
-    
-
     private static List<String> loadSongsFromFolder(String folderPath) {
         List<String> songs = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(folderPath))) {
