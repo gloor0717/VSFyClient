@@ -60,7 +60,7 @@ public class UnifiedClient {
                 // Start P2P server in a new thread
                 new Thread(this::startP2PServer).start();
     
-                System.out.println("Attempting to connect to the server at " + serverName + ":" + SERVER_PORT);
+                // System.out.println("Attempting to connect to the server at " + serverName + ":" + SERVER_PORT);
                 System.out.println("Connected to server. Ready for user input.");
     
                 out.println("REGISTER " + clientName + " " + p2pPort + " " + String.join(" ", clientSongs));
@@ -113,7 +113,7 @@ public class UnifiedClient {
         try {
             p2pServerSocket = new ServerSocket(0); // Lets the system pick an available port
             p2pPort = p2pServerSocket.getLocalPort();
-            System.out.println("P2P Server started on port: " + p2pPort);
+            // System.out.println("P2P Server started on port: " + p2pPort);
 
             if (out != null) {
                 out.println("UPDATE_PORT " + clientName + " " + p2pPort);
