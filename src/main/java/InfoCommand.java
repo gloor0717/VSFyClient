@@ -21,7 +21,11 @@ public class InfoCommand implements Command {
         out.println(command);
 
         String response = client.waitForResponse("Client:");
-        System.out.println(response);
+        if (response != null) {
+            System.out.println(response);
+        } else {
+            System.out.println("No response received.");
+        }
         System.out.print("Enter command: ");
     }
 }

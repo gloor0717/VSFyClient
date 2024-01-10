@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.Scanner;
@@ -27,48 +28,69 @@ public class UnifiedClient {
         this.musicFolderPath = musicFolderPath; // Set the music folder path
         this.clientSongs = clientSongs;
         this.p2pPort = 0;
-    }
+    } 
 
     public void start() {
         System.out.println("Starting the client...");
-        try (Socket clientSocket = new Socket(InetAddress.getByName(serverName), SERVER_PORT);
-                Scanner scanner = new Scanner(System.in)) {
-            out = new PrintWriter(clientSocket.getOutputStream(), true);
-            buffin = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-
-            // Start P2P server in a new thread
-            new Thread(this::startP2PServer).start();
-
-            System.out.println("Attempting to connect to the server at " + serverName + ":" + SERVER_PORT);
-            System.out.println("Connected to server. Ready for user input.");
-
-            out.println("REGISTER " + clientName + " " + p2pPort + " " + String.join(" ", clientSongs));
-
-            showMenu();
-
-            while (true) {
-                String commandInput = scanner.nextLine();
-                processCommand(commandInput);
+        Socket clientSocket = null;
+        try {
+            clientSocket = new Socket(InetAddress.getByName(serverName), SERVER_PORT);
+    
+            // Set a read timeout on the socket (e.g., 5000 milliseconds for 5 seconds)
+            clientSocket.setSoTimeout(5000);
+    
+            try (Scanner scanner = new Scanner(System.in)) {
+                out = new PrintWriter(clientSocket.getOutputStream(), true);
+                buffin = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+    
+                // Start P2P server in a new thread
+                new Thread(this::startP2PServer).start();
+    
+                System.out.println("Attempting to connect to the server at " + serverName + ":" + SERVER_PORT);
+                System.out.println("Connected to server. Ready for user input.");
+    
+                out.println("REGISTER " + clientName + " " + p2pPort + " " + String.join(" ", clientSongs));
+    
+                showMenu();
+    
+                while (true) {
+                    String commandInput = scanner.nextLine();
+                    processCommand(commandInput);
+                }
             }
         } catch (IOException e) {
             System.err.println("Error: " + e.getMessage());
             System.out.println("Connection lost or unable to connect. Exiting.");
-        }
-    }
-
-    public String waitForResponse(String responseType) {
-        try {
-            String response;
-            while ((response = buffin.readLine()) != null) {
-                if (response.startsWith(responseType)) {
-                    return response;
+        } finally {
+            // Ensure the socket is closed on exit
+            if (clientSocket != null && !clientSocket.isClosed()) {
+                try {
+                    clientSocket.close();
+                } catch (IOException e) {
+                    System.err.println("Error closing the socket: " + e.getMessage());
                 }
             }
-        } catch (IOException e) {
-            System.err.println("Error reading server response: " + e.getMessage());
         }
-        return null;
     }
+    
+
+    public String waitForResponse(String responseType) {
+    try {
+        String response;
+        while ((response = buffin.readLine()) != null) {
+            if (response.startsWith(responseType)) {
+                return response;
+            }
+        }
+    } catch (SocketTimeoutException e) {
+        System.out.println("Response timed out.");
+    } catch (IOException e) {
+        System.err.println("Error reading server response: " + e.getMessage());
+    }
+    return null;
+}
+
+    
 
     private void startP2PServer() {
         try {

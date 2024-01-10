@@ -39,6 +39,7 @@ public class RequestCommand implements Command {
             }
         } else {
             System.out.println("RequestCommand: The requested song was not found or no response received.");
+            System.out.println("Enter command:");
         }
     }
 }
